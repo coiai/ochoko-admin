@@ -56,7 +56,7 @@ class ApiClient {
   }
 
   async login(email: string, password: string): Promise<LoginResponse> {
-    const response = await this.request<LoginResponse>('/auth/login', {
+    const response = await this.request<LoginResponse>('/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
@@ -65,7 +65,7 @@ class ApiClient {
   }
 
   async getCurrentUser(): Promise<User> {
-    return this.request<User>('/auth/me');
+    return this.request<User>('/me/');
   }
 
   async getSakes(): Promise<Sake[]> {
