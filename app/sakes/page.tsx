@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { apiClient } from '@/lib/api/client';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://k5kutx396j.us-east-1.awsapprunner.com/api';
 
@@ -83,38 +84,16 @@ export default function SakesPage() {
     setDeleting(true);
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/admin/sakes/bulk-delete`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sake_ids: Array.from(selectedIds),
-        }),
-      });
-
-      if (response.status === 401 || response.status === 403) {
-        router.push('/login');
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error('削除に失敗しました');
-      }
-
-      const result = await response.json();
+      const result = await apiClient.bulkDeleteSakes(Array.from(selectedIds));
       alert(`${result.deleted_count}件の日本酒を削除しました`);
       
       setSelectedIds(new Set());
       fetchSakes();
     } catch (err) {
+      if (err instanceof Error && err.message === 'Unauthorized') {
+        router.push('/login');
+        return;
+      }
       setError(err instanceof Error ? err.message : '削除に失敗しました');
     } finally {
       setDeleting(false);
