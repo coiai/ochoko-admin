@@ -72,7 +72,7 @@ export default function ImportPage() {
     setError(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('admin_token');
       if (!token) {
         router.push('/login');
         return;
@@ -90,7 +90,7 @@ export default function ImportPage() {
         body: formData,
       });
 
-      if (response.status === 401) {
+      if (response.status === 401 || response.status === 403) {
         router.push('/login');
         return;
       }
@@ -122,7 +122,7 @@ export default function ImportPage() {
     setError(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('admin_token');
       if (!token) {
         router.push('/login');
         return;
@@ -141,7 +141,7 @@ export default function ImportPage() {
         body: formData,
       });
 
-      if (response.status === 401) {
+      if (response.status === 401 || response.status === 403) {
         router.push('/login');
         return;
       }
