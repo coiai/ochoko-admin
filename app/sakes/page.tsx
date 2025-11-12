@@ -2,20 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { apiClient } from '@/lib/api/client';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://k5kutx396j.us-east-1.awsapprunner.com/api';
-
-interface Brewery {
-  id: number;
-  name: string;
-  location: string;
-  prefecture: string;
-}
 
 interface Sake {
   id: number;
   name: string;
-  brewery: Brewery;
+  brewery: number;
+  brewery_name: string;
+  brewery_prefecture: string;
   tokutei_meisho: string;
   description?: string;
 }
@@ -27,17 +23,22 @@ export default function SakesPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [pageSize, setPageSize] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [totalCount, setTotalCount] = useState<number>(0);
 
   useEffect(() => {
     fetchSakes();
-  }, []);
+  }, [pageSize, currentPage]);
 
   const fetchSakes = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/sakes/?limit=100`);
+      const offset = pageSize === -1 ? 0 : (currentPage - 1) * pageSize;
+      const limit = pageSize === -1 ? 10000 : pageSize;
+      const response = await fetch(`${API_BASE_URL}/sakes/?limit=${limit}&offset=${offset}`);
       
       if (!response.ok) {
         throw new Error('日本酒データの取得に失敗しました');
@@ -45,12 +46,33 @@ export default function SakesPage() {
 
       const data = await response.json();
       setSakes(data);
+      
+      if (pageSize === -1) {
+        setTotalCount(data.length);
+      } else if (data.length < pageSize) {
+        setTotalCount(offset + data.length);
+      } else {
+        setTotalCount(offset + data.length + 1);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '日本酒データの取得に失敗しました');
     } finally {
       setLoading(false);
     }
   };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+    setSelectedIds(new Set());
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    setSelectedIds(new Set());
+  };
+
+  const totalPages = pageSize === -1 ? 1 : Math.ceil(totalCount / pageSize);
 
   const handleSelectAll = () => {
     if (selectedIds.size === sakes.length) {
@@ -83,38 +105,16 @@ export default function SakesPage() {
     setDeleting(true);
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/admin/sakes/bulk-delete`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sake_ids: Array.from(selectedIds),
-        }),
-      });
-
-      if (response.status === 401 || response.status === 403) {
-        router.push('/login');
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error('削除に失敗しました');
-      }
-
-      const result = await response.json();
+      const result = await apiClient.bulkDeleteSakes(Array.from(selectedIds));
       alert(`${result.deleted_count}件の日本酒を削除しました`);
       
       setSelectedIds(new Set());
       fetchSakes();
     } catch (err) {
+      if (err instanceof Error && err.message === 'Unauthorized') {
+        router.push('/login');
+        return;
+      }
       setError(err instanceof Error ? err.message : '削除に失敗しました');
     } finally {
       setDeleting(false);
@@ -133,7 +133,18 @@ export default function SakesPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">日本酒一覧</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <label className="text-sm text-gray-600">表示件数:</label>
+          <select
+            value={pageSize}
+            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+          >
+            <option value={50}>50件</option>
+            <option value={100}>100件</option>
+            <option value={200}>200件</option>
+            <option value={-1}>全件</option>
+          </select>
           <button
             onClick={handleSelectAll}
             className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
@@ -198,10 +209,10 @@ export default function SakesPage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900">{sake.id}</td>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{sake.name}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{sake.brewery.name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{sake.brewery_name}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    <span className={sake.brewery.prefecture === '不明' ? 'text-yellow-600' : ''}>
-                      {sake.brewery.prefecture}
+                    <span className={sake.brewery_prefecture === '不明' ? 'text-yellow-600' : ''}>
+                      {sake.brewery_prefecture}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{sake.tokutei_meisho}</td>
@@ -215,8 +226,38 @@ export default function SakesPage() {
         </table>
       </div>
 
-      <div className="mt-4 text-sm text-gray-600">
-        全{sakes.length}件中 {selectedIds.size}件選択
+      <div className="mt-4 flex justify-between items-center">
+        <div className="text-sm text-gray-600">
+          {pageSize === -1 ? (
+            <>全{sakes.length}件中 {selectedIds.size}件選択</>
+          ) : (
+            <>
+              {(currentPage - 1) * pageSize + 1}〜{Math.min(currentPage * pageSize, totalCount)}件 / 全{totalCount}件中 {selectedIds.size}件選択
+            </>
+          )}
+        </div>
+        
+        {pageSize !== -1 && totalPages > 1 && (
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              前へ
+            </button>
+            <span className="text-sm text-gray-600">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages || sakes.length < pageSize}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              次へ
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

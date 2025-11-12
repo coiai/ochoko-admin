@@ -93,6 +93,13 @@ class ApiClient {
   async getBreweries(): Promise<Brewery[]> {
     return this.request<Brewery[]>('/breweries/');
   }
+
+  async bulkDeleteSakes(sakeIds: number[]): Promise<{ success: boolean; deleted_count: number; message: string }> {
+    return this.request('/admin/sakes/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ sake_ids: sakeIds }),
+    });
+  }
 }
 
 export const apiClient = new ApiClient();
