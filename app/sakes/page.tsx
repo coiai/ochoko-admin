@@ -134,6 +134,12 @@ export default function SakesPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">日本酒一覧</h1>
         <div className="flex gap-2 items-center">
+          <button
+            onClick={() => router.push('/import')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            CSVインポート
+          </button>
           <label className="text-sm text-gray-600">表示件数:</label>
           <select
             value={pageSize}
