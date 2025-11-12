@@ -6,17 +6,12 @@ import { apiClient } from '@/lib/api/client';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://k5kutx396j.us-east-1.awsapprunner.com/api';
 
-interface Brewery {
-  id: number;
-  name: string;
-  location: string;
-  prefecture: string;
-}
-
 interface Sake {
   id: number;
   name: string;
-  brewery: Brewery;
+  brewery: number;
+  brewery_name: string;
+  brewery_prefecture: string;
   tokutei_meisho: string;
   description?: string;
 }
@@ -177,10 +172,10 @@ export default function SakesPage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900">{sake.id}</td>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{sake.name}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{sake.brewery.name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{sake.brewery_name}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    <span className={sake.brewery.prefecture === '不明' ? 'text-yellow-600' : ''}>
-                      {sake.brewery.prefecture}
+                    <span className={sake.brewery_prefecture === '不明' ? 'text-yellow-600' : ''}>
+                      {sake.brewery_prefecture}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{sake.tokutei_meisho}</td>
