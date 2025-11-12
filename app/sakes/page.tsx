@@ -1,111 +1,222 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/contexts/AuthContext';
-import { apiClient } from '@/lib/api/client';
-import { Sake } from '@/lib/types';
-import Link from 'next/link';
-import { Navbar } from '@/components/Navbar';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://k5kutx396j.us-east-1.awsapprunner.com/api';
+
+interface Brewery {
+  id: number;
+  name: string;
+  location: string;
+  prefecture: string;
+}
+
+interface Sake {
+  id: number;
+  name: string;
+  brewery: Brewery;
+  tokutei_meisho: string;
+  description?: string;
+}
 
 export default function SakesPage() {
-  const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const [sakes, setSakes] = useState<Sake[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, authLoading, router]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchSakes();
-    }
-  }, [isAuthenticated]);
+    fetchSakes();
+  }, []);
 
   const fetchSakes = async () => {
+    setLoading(true);
+    setError(null);
+
     try {
-      setLoading(true);
-      const data = await apiClient.getSakes();
+      const response = await fetch(`${API_BASE_URL}/sakes/?limit=100`);
+      
+      if (!response.ok) {
+        throw new Error('日本酒データの取得に失敗しました');
+      }
+
+      const data = await response.json();
       setSakes(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch sakes');
+      setError(err instanceof Error ? err.message : '日本酒データの取得に失敗しました');
     } finally {
       setLoading(false);
     }
   };
 
-  if (authLoading || !isAuthenticated) {
-    return null;
+  const handleSelectAll = () => {
+    if (selectedIds.size === sakes.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(sakes.map(sake => sake.id)));
+    }
+  };
+
+  const handleSelectOne = (id: number) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleDelete = async () => {
+    if (selectedIds.size === 0) {
+      alert('削除する日本酒を選択してください');
+      return;
+    }
+
+    if (!confirm(`選択した${selectedIds.size}件の日本酒を削除しますか？この操作は取り消せません。`)) {
+      return;
+    }
+
+    setDeleting(true);
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/admin/sakes/bulk-delete`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sake_ids: Array.from(selectedIds),
+        }),
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        router.push('/login');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error('削除に失敗しました');
+      }
+
+      const result = await response.json();
+      alert(`${result.deleted_count}件の日本酒を削除しました`);
+      
+      setSelectedIds(new Set());
+      fetchSakes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '削除に失敗しました');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">読み込み中...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">日本酒管理</h1>
-            <Link
-              href="/sakes/new"
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">日本酒一覧</h1>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSelectAll}
+            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+          >
+            {selectedIds.size === sakes.length ? '全選択解除' : '全選択'}
+          </button>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              新規投稿
-            </Link>
-          </div>
-
-          {error && (
-            <div className="rounded-md bg-red-50 p-4 mb-4">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          )}
-
-          {loading ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500">読み込み中...</p>
-            </div>
-          ) : (
-            <div className="bg-white shadow overflow-hidden sm:rounded-md">
-              <ul className="divide-y divide-gray-200">
-                {sakes.map((sake) => (
-                  <li key={sake.id}>
-                    <Link
-                      href={`/sakes/${sake.id}`}
-                      className="block hover:bg-gray-50 transition"
-                    >
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <p className="text-lg font-medium text-indigo-600 truncate">
-                              {sake.name}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              {sake.brewery_name} ({sake.brewery_prefecture})
-                            </p>
-                          </div>
-                          <div className="ml-4 flex-shrink-0 flex items-center space-x-4">
-                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                              {sake.tokutei_meisho}
-                            </span>
-                            {sake.average_rating && (
-                              <span className="text-sm text-gray-500">
-                                ★ {sake.average_rating.toFixed(1)} ({sake.review_count})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
+              {deleting ? '削除中...' : `選択した${selectedIds.size}件を削除`}
+            </button>
           )}
         </div>
+      </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-red-800">{error}</p>
+        </div>
+      )}
+
+      <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === sakes.length && sakes.length > 0}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">日本酒名</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">醸造所</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">都道府県</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">特定名称</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">説明</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {sakes.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  日本酒データがありません
+                </td>
+              </tr>
+            ) : (
+              sakes.map((sake) => (
+                <tr key={sake.id} className={selectedIds.has(sake.id) ? 'bg-blue-50' : ''}>
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(sake.id)}
+                      onChange={() => handleSelectOne(sake.id)}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900">{sake.id}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{sake.name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{sake.brewery.name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    <span className={sake.brewery.prefecture === '不明' ? 'text-yellow-600' : ''}>
+                      {sake.brewery.prefecture}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{sake.tokutei_meisho}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">
+                    {sake.description || '-'}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-4 text-sm text-gray-600">
+        全{sakes.length}件中 {selectedIds.size}件選択
       </div>
     </div>
   );
