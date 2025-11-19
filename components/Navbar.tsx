@@ -34,6 +34,12 @@ export function Navbar() {
               >
                 日本酒管理
               </Link>
+              <Link
+                href="/duplicates"
+                className="text-white hover:bg-indigo-700 inline-flex items-center px-3 py-2 rounded-md text-sm font-medium"
+              >
+                重複チェック
+              </Link>
             </div>
           </div>
           <div className="flex items-center">
