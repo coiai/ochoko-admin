@@ -28,6 +28,8 @@ export default function DuplicatesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'count'>('count');
 
   useEffect(() => {
     fetchDuplicates();
@@ -87,6 +89,32 @@ export default function DuplicatesPage() {
     setExpandedGroups(new Set());
   };
 
+  const filteredAndSortedDuplicates = duplicates
+    .filter((group) => {
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      const nameMatch = group.name.toLowerCase().includes(query);
+      const breweryMatch = group.sakes.some(sake => 
+        sake.brewery_name.toLowerCase().includes(query)
+      );
+      const prefectureMatch = group.sakes.some(sake => 
+        sake.brewery_prefecture.toLowerCase().includes(query)
+      );
+      return nameMatch || breweryMatch || prefectureMatch;
+    })
+    .sort((a, b) => {
+      if (sortOrder === 'asc') {
+        return a.name.localeCompare(b.name, 'ja');
+      } else if (sortOrder === 'desc') {
+        return b.name.localeCompare(a.name, 'ja');
+      } else {
+        if (b.count !== a.count) {
+          return b.count - a.count;
+        }
+        return a.name.localeCompare(b.name, 'ja');
+      }
+    });
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -139,13 +167,64 @@ export default function DuplicatesPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
-            <p className="text-blue-800">
-              同じ名前を持つ日本酒が{duplicates.length}グループ見つかりました
-            </p>
+          <div className="bg-white shadow-md rounded-lg p-4 mb-4">
+            <div className="flex flex-col gap-4">
+              <div className="flex gap-4 items-center">
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    placeholder="日本酒名、醸造所、都道府県で検索..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSortOrder('count')}
+                    className={`px-4 py-2 rounded-md ${
+                      sortOrder === 'count'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    重複数順
+                  </button>
+                  <button
+                    onClick={() => setSortOrder('asc')}
+                    className={`px-4 py-2 rounded-md ${
+                      sortOrder === 'asc'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    名前順 ↑
+                  </button>
+                  <button
+                    onClick={() => setSortOrder('desc')}
+                    className={`px-4 py-2 rounded-md ${
+                      sortOrder === 'desc'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    名前順 ↓
+                  </button>
+                </div>
+              </div>
+              <div className="text-sm text-gray-600">
+                {filteredAndSortedDuplicates.length !== duplicates.length ? (
+                  <>
+                    {filteredAndSortedDuplicates.length}グループ表示中（全{duplicates.length}グループ）
+                  </>
+                ) : (
+                  <>同じ名前を持つ日本酒が{duplicates.length}グループ見つかりました</>
+                )}
+              </div>
+            </div>
           </div>
 
-          {duplicates.map((group) => (
+          {filteredAndSortedDuplicates.map((group) => (
             <div key={group.name} className="bg-white shadow-md rounded-lg overflow-hidden">
               <div
                 className="bg-gray-50 px-6 py-4 cursor-pointer hover:bg-gray-100 flex justify-between items-center"
