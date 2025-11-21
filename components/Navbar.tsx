@@ -5,8 +5,13 @@ import { useAuth } from '@/lib/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 
 export function Navbar() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const router = useRouter();
+
+  console.log("Navbar Log:", { user, isAuthenticated, loading });
+
+  if (loading) return null;        // ✅ 認証確認中は描画しない
+  if (!isAuthenticated) return null;
 
   const handleLogout = () => {
     logout();
@@ -33,6 +38,12 @@ export function Navbar() {
                 className="text-white hover:bg-indigo-700 inline-flex items-center px-3 py-2 rounded-md text-sm font-medium"
               >
                 日本酒管理
+              </Link>
+              <Link
+                href="/duplicates"
+                className="text-white hover:bg-indigo-700 inline-flex items-center px-3 py-2 rounded-md text-sm font-medium"
+              >
+                重複チェック
               </Link>
             </div>
           </div>
