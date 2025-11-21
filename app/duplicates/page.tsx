@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { apiClient } from '@/lib/api/client';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://k5kutx396j.us-east-1.awsapprunner.com/api';
 
@@ -30,6 +31,8 @@ export default function DuplicatesPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'count'>('count');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchDuplicates();
@@ -89,6 +92,54 @@ export default function DuplicatesPage() {
     setExpandedGroups(new Set());
   };
 
+  const handleSelectAll = () => {
+    const allSakeIds = duplicates.flatMap(group => group.sakes.map(sake => sake.id));
+    if (selectedIds.size === allSakeIds.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(allSakeIds));
+    }
+  };
+
+  const handleSelectOne = (id: number) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleDelete = async () => {
+    if (selectedIds.size === 0) {
+      alert('削除する日本酒を選択してください');
+      return;
+    }
+
+    if (!confirm(`選択した${selectedIds.size}件の日本酒を削除しますか？この操作は取り消せません。`)) {
+      return;
+    }
+
+    setDeleting(true);
+
+    try {
+      const result = await apiClient.bulkDeleteSakes(Array.from(selectedIds));
+      alert(`${result.deleted_count}件の日本酒を削除しました`);
+      
+      setSelectedIds(new Set());
+      fetchDuplicates();
+    } catch (err) {
+      if (err instanceof Error && err.message === 'Unauthorized') {
+        router.push('/login');
+        return;
+      }
+      setError(err instanceof Error ? err.message : '削除に失敗しました');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const filteredAndSortedDuplicates = duplicates
     .filter((group) => {
       if (!searchQuery) return true;
@@ -136,6 +187,21 @@ export default function DuplicatesPage() {
           </button>
           {duplicates.length > 0 && (
             <>
+              <button
+                onClick={handleSelectAll}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                {selectedIds.size === duplicates.flatMap(g => g.sakes).length ? '全選択解除' : '全選択'}
+              </button>
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {deleting ? '削除中...' : `選択した${selectedIds.size}件を削除`}
+                </button>
+              )}
               <button
                 onClick={expandAll}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
@@ -248,6 +314,24 @@ export default function DuplicatesPage() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
+                        <th className="px-4 py-3 text-left">
+                          <input
+                            type="checkbox"
+                            checked={group.sakes.every(sake => selectedIds.has(sake.id))}
+                            onChange={() => {
+                              const groupSakeIds = group.sakes.map(s => s.id);
+                              const allSelected = groupSakeIds.every(id => selectedIds.has(id));
+                              const newSelected = new Set(selectedIds);
+                              if (allSelected) {
+                                groupSakeIds.forEach(id => newSelected.delete(id));
+                              } else {
+                                groupSakeIds.forEach(id => newSelected.add(id));
+                              }
+                              setSelectedIds(newSelected);
+                            }}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                          />
+                        </th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">醸造所</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">都道府県</th>
@@ -258,7 +342,15 @@ export default function DuplicatesPage() {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {group.sakes.map((sake) => (
-                        <tr key={sake.id} className="hover:bg-gray-50">
+                        <tr key={sake.id} className={selectedIds.has(sake.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(sake.id)}
+                              onChange={() => handleSelectOne(sake.id)}
+                              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                            />
+                          </td>
                           <td className="px-4 py-3 text-sm text-gray-900">{sake.id}</td>
                           <td className="px-4 py-3 text-sm text-gray-600">{sake.brewery_name}</td>
                           <td className="px-4 py-3 text-sm text-gray-600">
