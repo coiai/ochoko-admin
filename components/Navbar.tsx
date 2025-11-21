@@ -5,8 +5,13 @@ import { useAuth } from '@/lib/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 
 export function Navbar() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const router = useRouter();
+
+  console.log("Navbar Log:", { user, isAuthenticated, loading });
+
+  if (loading) return null;        // ✅ 認証確認中は描画しない
+  if (!isAuthenticated) return null;
 
   const handleLogout = () => {
     logout();
